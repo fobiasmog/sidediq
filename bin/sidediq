@@ -1,0 +1,35 @@
+#!/usr/bin/env ruby
+
+require 'ffi-rzmq'
+require 'json'
+require "sidediq/job"
+
+require File.expand_path("./config/environment.rb")
+
+if defined?(::Rails)
+    if Rails.autoloaders.zeitwerk_enabled?
+        ::Zeitwerk::Loader.eager_load_all
+    else
+        ::Rails.application.eager_load!
+    end
+else
+    raise "No Rails"
+end
+
+context = ZMQ::Context.new
+socket  = context.socket(ZMQ::PULL)
+socket.bind("tcp://127.0.0.1:5555")
+
+print "Server is running and waiting for messages...\n"
+
+loop do
+    msg = ""
+    socket.recv_string(msg)
+    puts "Server received: #{msg}"
+    # socket.send_string("ACK: #{msg}", 0)
+    job_data = JSON.parse(msg)
+    Sidediq::Job.execute(job_data)
+end
+print "Server shutting down...\n"
+socket.close
+context.terminate
